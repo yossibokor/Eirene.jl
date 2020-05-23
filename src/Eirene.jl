@@ -4,7 +4,7 @@
 # Eirene.  If not, please see <http://www.gnu.org/licenses/>.
 #
 # Eirene Library for Homological Algebra
-# Copyright (C) 2016, 2017, 2018, 2019  Gregory Henselman
+# Copyright (C) 2016, 2017, 2018, 2019, 2020  Gregory Henselman
 # www.gregoryhenselman.org
 #
 # Eirene is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Eirene.  If not, swasserstein_distance([0 1], [3 5; 7 9], p=Inf, q=1)ee <http://www.gnu.org/licenses/>.
+# along with Eirene.  If not, see <http://www.gnu.org/licenses/>.
 #
 # PLEASE HELP US DOCUMENT Eirene's recent work! Bibtex entries and
 # contact information for teaching and outreach can be found at the
@@ -48,6 +48,16 @@ using Statistics
 using DelimitedFiles
 using CSV
 using Hungarian #added for the Wasserstein distances
+
+##########################################################################################
+
+#### 	USER TEST FUNCTION
+
+##########################################################################################
+
+function example_function()
+	print("Welcome to Eirene!  Great job running the example function.")
+end
 
 
 ##########################################################################################
@@ -1588,6 +1598,10 @@ end
 function unsegmentedfilteredcomplex2segmentedfilteredcomplex(rv,cp,fv,dp;ncd=Inf)
 	# ncd stands for number of chain dimensions
 	# nsd stands for number of stored dimensions
+	# this function returns a segmented complex with data for the first ncd
+	# dimensions (the others are not included in the output); the output takes
+	# the form of four length-ncd arrays
+
 	nsd 	= 	length(dp)-1
 	if ncd == Inf
 		ncd  	= nsd
@@ -1613,7 +1627,13 @@ function unsegmentedfilteredcomplex2segmentedfilteredcomplex(rv,cp,fv,dp;ncd=Inf
 		fvc[p] 		=	zeros(Int64,0)
 	end
 
-	dpc 			= vcat(dp,fill(dp[end],ncd+1-length(dp))) # extend dp to the proper length
+	if length(dp) 	>	ncd+1
+		dpc			=	copy(dp[1:ncd+1])
+	elseif length(dp)<  ncd+1
+		dpc 		=	vcat(dp,fill(dp[end],ncd+1-length(dp))) # extend dp to the proper length
+	else
+		dpc 		=	copy(dp)
+	end
 	return rvc,cpc,fvc,dpc
 end
 
@@ -5329,14 +5349,6 @@ function classrep_pjs(
 		cloudedges_orderverts = vetexinverter[cloudedges]
 	end
 
-	##############################################################################################
-	# WAYPOINT 1
-	# printval(coords,"coords")
-	# printval(coords==coords,"coords==coords")
-	# printval(D["input"]["pc"] == "n/a","D[\"input\"][\"pc\"] == \"n/a\"")
-	# printval(D["input"]["pc"],"D[\"input\"][\"pc\"]")
-##############################################################################################
-
 	if coords == []
 		if D["input"]["pc"] == "n/a"
 			print("No point cloud is available.  Please consider using the mds keyword argument to generate a Euclidean embedding from the distance matrix (see documentation).")
@@ -5375,7 +5387,7 @@ function classrep_pjs(
 				metricmatrix = hopdistance(edges_orderverts,inputis = "edges")
 			end
 		end
-		coords = classical_mds(metricmatrix,embeddingdim)
+		coords = transform(fit(MDS, float.(metricmatrix), maxoutdim = embeddingdim, distances=true)) #classical_mds(metricmatrix,embeddingdim)
 		# coords = round.(coords,10)
 		model = "pc"
 	end
@@ -5430,7 +5442,22 @@ function classrep_pjs(
 	if showedges
 		faces = classrep(D,dim=dim,class=class)
 		edges = d1faces(faces)
-		T3 =  edgetrace_pjs(coords,edges,model=model	)
+		if showcloud
+			T3 =  edgetrace_pjs(coords,edges,model=model	)
+		else
+			# by default vertices in the edge list index into the original
+			# point cloud; if we're not showing the ambient cloud, then we have
+			# by this point deleted the "irrelevant" columns from the coordinate
+			# matrix, which changes the indices.  padding with zeros corrects
+			# for this difference
+			# note that for design reasons we re-defined classvinoldspace above,
+			# so must re-define it
+			classvinoldspace_original = D["nvl2ovl"][classvinnewspace]
+			coords_padded = zeros(size(coords,1),maximum(classvinoldspace_original))
+			coords_padded[:,classvinoldspace_original] = coords
+			T3 =  edgetrace_pjs(coords_padded,edges,model=model	)
+		end
+
 		append!(data,T3)
 	end
 
@@ -6325,7 +6352,7 @@ function hopdistance_sparse(rv,cp)
 			fringelist = findall(fringenodes)
 			fringenodes[:].= false
 		end
-		H[.!metnodes,i]=m+1
+		H[.!metnodes,i].=m+1
 	end
 	return H
 end
@@ -7541,6 +7568,7 @@ function unittest()
 
 	for p 	= 	1:length(x)
 		if !isempty(x[p])
+			println(p)
 			return x
 		end
 	end
